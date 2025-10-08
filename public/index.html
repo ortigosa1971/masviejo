@@ -1,93 +1,128 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Masviejo - Datos Meteorológicos</title>
-  <style>
-    body {
-      font-family: system-ui, Arial, sans-serif;
-      background: #f9fafb;
-      color: #1f2937;
-      margin: 0;
-      padding: 0;
-    }
-    main {
-      max-width: 900px;
-      margin: 40px auto;
-      padding: 0 16px;
-    }
-    h1 {
-      color: #111827;
-      font-size: 2rem;
-      margin-bottom: 8px;
-    }
-    p {
-      color: #4b5563;
-      margin-bottom: 24px;
-    }
-    .btn {
-      display: inline-block;
-      padding: 0.7rem 1.2rem;
-      border-radius: 0.6rem;
-      background: #4f46e5;
-      color: #fff;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.2s ease-in-out;
-    }
-    .btn:hover {
-      background: #4338ca;
-    }
-    section {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-    .info-box {
-      background: #fff;
-      border-radius: 0.8rem;
-      padding: 1rem;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-    }
-    footer {
-      text-align: center;
-      font-size: 0.85rem;
-      color: #6b7280;
-      margin-top: 32px;
-    }
-  </style>
-</head>
-
-<body>
-  <main>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Masviejo</title>
+    <style>
+      body {
+        font-family: system-ui, Arial, sans-serif;
+        background: #f9fafb;
+        color: #111;
+        margin: 0;
+        padding: 20px;
+      }
+      h1 {
+        font-size: 1.8rem;
+        margin-bottom: 0.3rem;
+      }
+      p {
+        margin-bottom: 1rem;
+        color: #555;
+      }
+      .btn {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        margin: 0.3rem 0;
+        border-radius: 0.4rem;
+        background: #4f46e5;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn:hover {
+        background: #4338ca;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 20px;
+        background: #fff;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+      }
+      th {
+        background-color: #4f46e5;
+        color: white;
+      }
+      tr:nth-child(even) {
+        background-color: #f2f2f2;
+      }
+      footer {
+        text-align: center;
+        margin-top: 40px;
+        font-size: 0.9rem;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
     <h1>Masviejo</h1>
-    <p>Utilidades para gestionar y descargar los datos almacenados en la base de datos local (SQLite).</p>
+    <p>
+      Observaciones meteorológicas locales almacenadas en la base de datos SQLite.
+    </p>
 
-    <section>
-      <a href="/api/db/download" class="btn" download>💾 Descargar base de datos (wu.db)</a>
-      <a href="/api/db/export.csv" class="btn">📄 Exportar CSV</a>
+    <div>
       <a href="/api/db/stats" class="btn">📊 Ver estadísticas</a>
-    </section>
-
-    <div class="info-box">
-      <h2>Cómo usar</h2>
-      <ul>
-        <li>Los datos se guardan automáticamente en la base de datos persistente.</li>
-        <li>Puedes <strong>descargar la base SQLite</strong> para analizarla o subirla a Rails.</li>
-        <li>También puedes <strong>exportar los registros como CSV</strong>.</li>
-      </ul>
+      <a href="/api/db/export.csv" class="btn">📄 Exportar CSV</a>
+      <a href="/api/db/download" class="btn" download>💾 Descargar base de datos</a>
     </div>
 
+    <h2>📋 Últimos registros guardados</h2>
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>Estación</th>
+          <th>Fecha UTC</th>
+          <th>Temperatura (°C)</th>
+          <th>Humedad (%)</th>
+          <th>Presión (hPa)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="5">Cargando datos...</td></tr>
+      </tbody>
+    </table>
+
     <footer>
-      Masviejo &copy; 2025 — Sistema de registro meteorológico experimental
+      Masviejo © 2025 — Datos meteorológicos experimentales
     </footer>
-  </main>
-</body>
+
+    <script>
+      async function cargarDatos() {
+        try {
+          const res = await fetch('/api/db/view');
+          const datos = await res.json();
+          const tbody = document.querySelector('#tabla tbody');
+          tbody.innerHTML = '';
+          if (!datos.length) {
+            tbody.innerHTML = '<tr><td colspan="5">No hay datos disponibles aún.</td></tr>';
+            return;
+          }
+          for (const r of datos) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${r.station || ''}</td>
+              <td>${r.obsTimeUtc || ''}</td>
+              <td>${r.tempC ?? ''}</td>
+              <td>${r.humidity ?? ''}</td>
+              <td>${r.pressureHpa ?? ''}</td>
+            `;
+            tbody.appendChild(tr);
+          }
+        } catch (err) {
+          console.error(err);
+          document.querySelector('#tabla tbody').innerHTML =
+            '<tr><td colspan="5">Error al cargar los datos.</td></tr>';
+        }
+      }
+      cargarDatos();
+    </script>
+  </body>
 </html>
-
-
 
 
 
