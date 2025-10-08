@@ -1,8 +1,4 @@
-
-// db.js
-// Tiny SQLite layer to persist WU observations for later export/migration to Rails
-
-import Database from "better-sqlite3";
+﻿import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 
@@ -16,13 +12,12 @@ db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
 db.pragma("temp_store = MEMORY");
 
-// Core schema: one row per observation per station, unique by (station, epoch)
 db.exec(`
 CREATE TABLE IF NOT EXISTS observations (
   id            INTEGER PRIMARY KEY,
   station       TEXT NOT NULL,
-  epoch         INTEGER NOT NULL,       -- seconds since epoch
-  obsTimeUtc    TEXT,                   -- ISO8601
+  epoch         INTEGER NOT NULL,
+  obsTimeUtc    TEXT,
   tempC         REAL,
   dewpointC     REAL,
   humidity      REAL,
@@ -34,7 +29,7 @@ CREATE TABLE IF NOT EXISTS observations (
   precipTotalMm REAL,
   solarWm2      REAL,
   uv            REAL,
-  raw           TEXT,                   -- raw JSON observation for future-proofing
+  raw           TEXT,
   created_at    TEXT DEFAULT (datetime('now')),
   UNIQUE(station, epoch)
 );
@@ -42,21 +37,17 @@ CREATE TABLE IF NOT EXISTS observations (
 CREATE INDEX IF NOT EXISTS idx_obs_station_epoch ON observations(station, epoch);
 `);
 
-// Helper to coerce values to numbers or null
 function numOrNull(x) {
   if (x === undefined || x === null || Number.isNaN(Number(x))) return null;
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
 }
 
-// Extract a normalized record from differing WU payload shapes
 export function normalizeObservation(o, station) {
-  // Try to find epoch and obsTimeUtc
   const epoch = o?.epoch ?? (o?.obsTimeUtc ? Math.floor(Date.parse(o.obsTimeUtc)/1000) : null);
   const obsTimeUtc = o?.obsTimeUtc ?? (epoch ? new Date(epoch * 1000).toISOString() : null);
 
-  // Try common places for metrics
-  const m = o?.metric ?? o?.imperial ?? o; // in case nested
+  const m = o?.metric ?? o?.imperial ?? o;
   const tempC = numOrNull(m?.temp ?? m?.tempAvg ?? m?.temperature);
   const dewpointC = numOrNull(m?.dewpt ?? m?.dewptAvg);
   const humidity = numOrNull(m?.humidity ?? m?.humidityAvg);
@@ -80,7 +71,6 @@ export function normalizeObservation(o, station) {
   };
 }
 
-// Insert a batch with conflict ignore
 const insertStmt = db.prepare(`
 INSERT OR IGNORE INTO observations
 (station, epoch, obsTimeUtc, tempC, dewpointC, humidity, pressureHpa, windKph, windGustKph, windDir,
@@ -101,19 +91,21 @@ export function insertMany(observations, station) {
 
 export function getStats(station) {
   const where = station ? "WHERE station = ?" : "";
-  const row = db.prepare(`
+  const sql = `
     SELECT COUNT(*) as count, MIN(epoch) as minEpoch, MAX(epoch) as maxEpoch
     FROM observations ${where}
-  `).get(station ? station : undefined);
+  `;
+  const stmt = db.prepare(sql);
+  const row = station ? stmt.get(station) : stmt.get();
   return row || { count: 0, minEpoch: null, maxEpoch: null };
 }
 
 export function exportQuery({ station, fromEpoch, toEpoch, limit = 0 }) {
   const conds = [];
   const params = [];
-  if (station) { conds.push("station = ?"); params.push(station); }
+  if (station)   { conds.push("station = ?"); params.push(station); }
   if (fromEpoch) { conds.push("epoch >= ?"); params.push(fromEpoch); }
-  if (toEpoch) { conds.push("epoch <= ?"); params.push(toEpoch); }
+  if (toEpoch)   { conds.push("epoch <= ?"); params.push(toEpoch); }
   const where = conds.length ? ("WHERE " + conds.join(" AND ")) : "";
   const lim = limit ? `LIMIT ${Number(limit)}` : "";
   const rows = db.prepare(`
@@ -123,6 +115,6 @@ export function exportQuery({ station, fromEpoch, toEpoch, limit = 0 }) {
     ${where}
     ORDER BY epoch ASC
     ${lim}
-  `).all(*params);
+  `).all(...params);
   return rows;
 }
