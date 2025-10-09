@@ -5,126 +5,157 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Masviejo</title>
     <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a33;
+        --panel-2: #0e1630;
+        --text: #e8ecf3;
+        --muted: #aab6d6;
+        --brand: #4f7cff;
+        --brand-2: #3259cc;
+        --ok: #22c55e;
+        --warn: #f59e0b;
+        --err: #ef4444;
+        --border: #213056;
+      }
+      * { box-sizing: border-box }
       body {
-        font-family: system-ui, Arial, sans-serif;
-        background: #f9fafb;
-        color: #111;
         margin: 0;
-        padding: 20px;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+        background: radial-gradient(1200px 800px at 10% -10%, #172554 10%, transparent 60%),
+                    radial-gradient(1200px 800px at 120% 10%, #0f172a 0%, transparent 60%),
+                    var(--bg);
+        color: var(--text);
       }
-      h1 {
-        font-size: 1.8rem;
-        margin-bottom: 0.3rem;
+      header {
+        padding: 24px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(79,124,255,.06), rgba(79,124,255,0));
       }
-      p {
-        margin-bottom: 1rem;
-        color: #555;
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 0 12px }
+      h1 { margin: 0 0 8px; font-weight: 700; letter-spacing: .2px }
+      .sub { color: var(--muted); margin: 0 }
+      .grid {
+        display: grid; gap: 16px; padding: 16px 0;
+        grid-template-columns: 1fr;
       }
-      .btn {
-        display: inline-block;
-        padding: 0.5rem 1rem;
-        margin: 0.3rem 0;
-        border-radius: 0.4rem;
-        background: #4f46e5;
-        color: #fff;
-        text-decoration: none;
-        font-weight: 600;
+      @media (min-width: 900px) {
+        .grid { grid-template-columns: 1.2fr .8fr }
       }
-      .btn:hover {
-        background: #4338ca;
+      .card {
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.25);
       }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-top: 20px;
-        background: #fff;
+      .card h2 {
+        margin: 0; padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 16px; color: #cfd8ff;
       }
-      th, td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: center;
+      .card .content { padding: 14px 16px }
+      .row { display: flex; gap: 8px; flex-wrap: wrap }
+      input, select, button {
+        appearance: none; border: 1px solid var(--border);
+        background: #0c1533; color: var(--text);
+        padding: 10px 12px; border-radius: 10px; font-size: 14px;
       }
-      th {
-        background-color: #4f46e5;
-        color: white;
+      input:focus, select:focus { outline: 2px solid var(--brand); border-color: var(--brand) }
+      button {
+        background: var(--brand); border-color: transparent; cursor: pointer; font-weight: 600;
       }
-      tr:nth-child(even) {
-        background-color: #f2f2f2;
+      button.secondary { background: #0e1a3a; border: 1px solid var(--border) }
+      button:disabled { opacity: .6; cursor: not-allowed }
+      .kpis { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr) }
+      .kpi { padding: 10px 12px; background: #0d1736; border: 1px solid var(--border); border-radius: 10px }
+      .kpi .label { color: var(--muted); font-size: 12px }
+      .kpi .value { font-size: 18px; margin-top: 6px; font-weight: 700 }
+      table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+      thead th {
+        text-align: left; font-weight: 700; font-size: 13px; color: #cfd8ff;
+        background: #102047; padding: 12px; border-bottom: 1px solid var(--border);
       }
-      footer {
-        text-align: center;
-        margin-top: 40px;
-        font-size: 0.9rem;
-        color: #666;
-      }
+      tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: #e9eefc }
+      tbody tr:hover { background: rgba(79,124,255,.06) }
+      .muted { color: var(--muted) }
+      .status { font-size: 13px }
+      .status.ok { color: var(--ok) }
+      .status.err { color: var(--err) }
+      .actions { display:flex; gap:8px; flex-wrap:wrap }
+      .spacer { flex: 1 }
+      .footer { color: var(--muted); padding: 10px 0 24px; font-size: 12px; }
+      .badge { padding:4px 8px; border:1px solid var(--border); border-radius:999px; font-size:12px; background:#0e1a3a }
     </style>
   </head>
   <body>
-    <h1>Masviejo</h1>
-    <p>
-      Observaciones meteorológicas locales almacenadas en la base de datos SQLite.
-    </p>
+    <header>
+      <div class="wrap">
+        <h1>Masviejo</h1>
+        <p class="sub">Observaciones meteorológicas locales guardadas en SQLite</p>
+      </div>
+    </header>
 
-    <div>
-      <a href="/api/db/stats" class="btn">📊 Ver estadísticas</a>
-      <a href="/api/db/export.csv" class="btn">📄 Exportar CSV</a>
-      <a href="/api/db/download" class="btn" download>💾 Descargar base de datos</a>
-    </div>
+    <main class="wrap">
+      <div class="grid">
+        <!-- Panel izquierdo: acciones y tabla -->
+        <section class="card">
+          <h2>Datos</h2>
+          <div class="content">
+            <div class="row" style="align-items:center; margin-bottom:10px">
+              <label class="badge">Importar día</label>
+              <input id="station" placeholder="Station ID (p. ej. IALFAR32)" />
+              <input id="date" placeholder="YYYYMMDD" />
+              <button id="importBtn">Importar</button>
+              <span id="importStatus" class="status muted">—</span>
+              <span class="spacer"></span>
+              <button id="csvBtn" class="secondary">Exportar CSV</button>
+              <a id="dbBtn" class="secondary" style="text-decoration:none; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:#0e1a3a" href="/data/wu.db" download>Descargar DB</a>
+            </div>
 
-    <h2>📋 Últimos registros guardados</h2>
-    <table id="tabla">
-      <thead>
-        <tr>
-          <th>Estación</th>
-          <th>Fecha UTC</th>
-          <th>Temperatura (°C)</th>
-          <th>Humedad (%)</th>
-          <th>Presión (hPa)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td colspan="5">Cargando datos...</td></tr>
-      </tbody>
-    </table>
+            <div class="kpis" style="margin-bottom:12px">
+              <div class="kpi"><div class="label">Registros</div><div id="kpiCount" class="value">—</div></div>
+              <div class="kpi"><div class="label">Primer epoch</div><div id="kpiMin" class="value">—</div></div>
+              <div class="kpi"><div class="label">Último epoch</div><div id="kpiMax" class="value">—</div></div>
+              <div class="kpi"><div class="label">Estación</div><div id="kpiStation" class="value">—</div></div>
+            </div>
 
-    <footer>
-      Masviejo © 2025 — Datos meteorológicos experimentales
-    </footer>
+            <h3 style="margin:6px 0 8px">Últimos registros guardados</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Estación</th>
+                  <th>Fecha UTC</th>
+                  <th>Temp (°C)</th>
+                  <th>Humedad (%)</th>
+                </tr>
+              </thead>
+              <tbody id="tbody">
+                <tr><td colspan="4" class="muted">No hay datos disponibles aún.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-    <script>
-      async function cargarDatos() {
-        try {
-          const res = await fetch('/api/db/view');
-          const datos = await res.json();
-          const tbody = document.querySelector('#tabla tbody');
-          tbody.innerHTML = '';
-          if (!datos.length) {
-            tbody.innerHTML = '<tr><td colspan="5">No hay datos disponibles aún.</td></tr>';
-            return;
-          }
-          for (const r of datos) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${r.station || ''}</td>
-              <td>${r.obsTimeUtc || ''}</td>
-              <td>${r.tempC ?? ''}</td>
-              <td>${r.humidity ?? ''}</td>
-              <td>${r.pressureHpa ?? ''}</td>
-            `;
-            tbody.appendChild(tr);
-          }
-        } catch (err) {
-          console.error(err);
-          document.querySelector('#tabla tbody').innerHTML =
-            '<tr><td colspan="5">Error al cargar los datos.</td></tr>';
-        }
-      }
-      cargarDatos();
-    </script>
+        <!-- Panel derecho: ayuda -->
+        <aside class="card">
+          <h2>Ayuda rápida</h2>
+          <div class="content">
+            <p class="muted">1) Rellena <b>Station ID</b> y <b>YYYYMMDD</b> y pulsa <b>Importar</b>.</p>
+            <p class="muted">2) Verifica arriba los KPIs. Si el recuento no cambia, revisa tu <code>WU_API_KEY</code>.</p>
+            <p class="muted">3) Exporta CSV o descarga la base cuando quieras.</p>
+            <div style="height:6px"></div>
+            <div class="badge">Sugerencia</div>
+            <p class="muted">Evita la traducción automática del navegador en endpoints JSON (<code>/api/*</code>).</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="footer">Masviejo © 2025 — Datos meteorológicos experimentales</div>
+    </main>
+
+    <script src="app.js" defer></script>
   </body>
 </html>
-
-
 
 
 
