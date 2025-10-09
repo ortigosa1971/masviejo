@@ -1,172 +1,142 @@
-// public/app.js
+// app.js — UI mínima con acciones y KPIs
 
-function toYYYYMMDD(d) {
-  // Input: 'YYYY-MM-DD' from <input type="date">
-  if (!d) return "";
-  return d.replaceAll("-", "");
+const $ = (sel) => document.querySelector(sel);
+const tbody = $("#tbody");
+const kCount = $("#kpiCount");
+const kMin   = $("#kpiMin");
+const kMax   = $("#kpiMax");
+const kSta   = $("#kpiStation");
+
+const stationInput = $("#station");
+const dateInput = $("#date");
+const importBtn = $("#importBtn");
+const importStatus = $("#importStatus");
+const csvBtn = $("#csvBtn");
+
+// Helpers
+function fmt(n) { return Number.isFinite(n) ? String(n) : "—"; }
+function setStatus(msg, type="muted") {
+  importStatus.className = "status " + (type || "muted");
+  importStatus.textContent = msg;
 }
 
-function fmt(n, digits = 0) {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
-  const num = Number(n);
-  return num.toFixed(digits);
-}
-
-function parseWUResponse(json) {
-  // Tolerate formats: {observations: []} or [] directly
-  const arr = Array.isArray(json?.observations) ? json.observations
-            : Array.isArray(json) ? json
-            : [];
-
-  return arr.map(o => {
-    // Prefer metric; fallback to top-level for some stations
-    const m = o.metric ?? o;
-
-    const tLocal = o.obsTimeLocal ?? o.obsTimeUtc ?? (o.epoch ? new Date(o.epoch * 1000).toISOString() : "");
-
-    const temp = m?.temp ?? m?.tempAvg ?? null;
-    const dew  = m?.dewpt ?? m?.dewptAvg ?? null;
-    const rh   = m?.humidity ?? o.humidityAvg ?? null;
-    const pres = m?.pressure ?? m?.pressureMax ?? m?.pressureMin ?? null;
-    const w    = m?.windspeed ?? m?.windspeedAvg ?? null;
-    const gust = m?.windgust ?? m?.windgustHigh ?? null;
-    const dir  = m?.winddir ?? o.winddirAvg ?? null;
-
-    // --- PRECIP: split columns clearly ---
-    const precipRate  = (m?.precipRate  ?? o.precipRate  ?? null);
-    const precipTotal = (m?.precipTotal ?? o.precipTotal ?? null);
-
-    const uv  = o.uvHigh ?? o.uv ?? m?.uv ?? null;
-    const rad = o.solarRadiationHigh ?? o.solarRadiation ?? m?.solarRadiation ?? null;
-
-    return {
-      timeLocal: tLocal,
-      temp, dew, rh, pres, w, gust, dir,
-      precipRate, precipTotal,
-      uv, rad,
-      // for min/max if present
-      tempLow: m?.tempLow, tempHigh: m?.tempHigh,
-    };
-  });
-}
-
-async function loadData() {
-  const stationId = document.getElementById("stationId").value.trim();
-  const dateISO = document.getElementById("date").value; // YYYY-MM-DD
-  const date = toYYYYMMDD(dateISO);
-
-  const status = document.getElementById("status");
-  status.textContent = "Cargando…";
-
+// Cargar KPIs + tabla
+async function refreshUI(station=null) {
+  // KPIs
   try {
-    const url = new URL(location.origin + "/api/wu/history");
-    url.searchParams.set("stationId", stationId);
-    url.searchParams.set("date", date);
-
+    const url = new URL(location.origin + "/api/db/stats");
+    if (station) url.searchParams.set("station", station);
     const res = await fetch(url);
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json?.error || JSON.stringify(json).slice(0,200));
-    }
+    const stats = await res.json();
+    kCount.textContent = fmt(stats.count);
+    kMin.textContent   = fmt(stats.minEpoch);
+    kMax.textContent   = fmt(stats.maxEpoch);
+    kSta.textContent   = station || "—";
+  } catch (e) {
+    kCount.textContent = kMin.textContent = kMax.textContent = "—";
+    setStatus("Error cargando estadísticas", "err");
+  }
 
-    const rows = parseWUResponse(json);
-    const tbody = document.querySelector("#dataTable tbody");
+  // Tabla
+  try {
+    const url2 = new URL(location.origin + "/api/db/view");
+    url2.searchParams.set("limit", "100");
+    if (station) url2.searchParams.set("station", station);
+    const res2 = await fetch(url2);
+    const rows = await res2.json();
+
     tbody.innerHTML = "";
-
-    let minT = +Infinity, maxT = -Infinity;
-
-    rows.forEach(r => {
-      const t = r.temp ?? r.tempLow ?? r.tempHigh;
-      if (typeof t === "number") {
-        if (t < minT) minT = t;
-        if (t > maxT) maxT = t;
-      }
-
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="muted">No hay datos disponibles aún.</td></tr>`;
+      return;
+    }
+    for (const r of rows) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.timeLocal ?? "—"}</td>
-        <td>${fmt(r.temp,1)}</td>
-        <td>${fmt(r.dew,1)}</td>
-        <td>${fmt(r.rh)}</td>
-        <td>${fmt(r.pres,1)}</td>
-        <td>${fmt(r.w,1)}</td>
-        <td>${fmt(r.gust,1)}</td>
-        <td>${fmt(r.dir)}</td>
-        <td>${fmt(r.precipRate,2)}</td>
-        <td>${fmt(r.precipTotal,2)}</td>
-        <td>${fmt(r.uv,1)}</td>
-        <td>${fmt(r.rad,1)}</td>
+        <td>${r.station ?? ""}</td>
+        <td>${r.obsTimeUtc ?? ""}</td>
+        <td>${r.tempC ?? ""}</td>
+        <td>${r.humidity ?? ""}</td>
       `;
       tbody.appendChild(tr);
-    });
-
-    // KPIs
-    document.getElementById("kpiCount").textContent = rows.length.toString();
-    document.getElementById("kpiMin").textContent = Number.isFinite(minT) ? `${minT.toFixed(1)} °C` : "—";
-    document.getElementById("kpiMax").textContent = Number.isFinite(maxT) ? `${maxT.toFixed(1)} °C` : "—";
-
-    status.textContent = "OK";
-  } catch (err) {
-    console.error(err);
-    status.textContent = "Error: " + err.message;
+    }
+  } catch (e) {
+    console.error(e);
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">Error al cargar los datos.</td></tr>`;
   }
 }
 
-function toCSV() {
-  const rows = Array.from(document.querySelectorAll("#dataTable tbody tr"))
-    .map(tr => Array.from(tr.children).map(td => `"${(td.textContent||"").replaceAll('"','""')}"`))
-    .map(cols => cols.join(";"));
+// Importar un día de una estación
+async function importDay() {
+  const stationId = (stationInput.value || "").trim();
+  const date = (dateInput.value || "").trim();
+  if (!stationId || !/^\w{3,}$/.test(stationId)) {
+    setStatus("Pon un Station ID válido", "err"); return;
+  }
+  if (!/^\d{8}$/.test(date)) {
+    setStatus("Fecha en formato YYYYMMDD", "err"); return;
+  }
+  try {
+    importBtn.disabled = true;
+    setStatus("Importando…");
+    const url = new URL(location.origin + "/api/wu/history");
+    url.searchParams.set("stationId", stationId);
+    url.searchParams.set("date", date);
+    const res = await fetch(url);
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch {
+      // Si el navegador traduce, puede romper JSON → mostramos preview
+      setStatus("Respuesta no-JSON de WU (desactiva traducción).", "err");
+      console.warn("Respuesta WU:", text.slice(0,200));
+      importBtn.disabled = false;
+      return;
+    }
+    if (json.error) {
+      setStatus(json.error, "err");
+    } else {
+      setStatus(`Insertadas ${json.inserted} filas`, "ok");
+      await refreshUI(stationId);
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus("Error importando", "err");
+  } finally {
+    importBtn.disabled = false;
+  }
+}
 
-  const head = Array.from(document.querySelectorAll("#dataTable thead th"))
-    .map(th => `"${(th.textContent||"").replaceAll('"','""')}"`)
-    .join(";");
+// Exportar CSV (filtrado por estación si está rellena)
+async function exportCSV() {
+  const stationId = (stationInput.value || "").trim();
+  const url = new URL(location.origin + "/api/db/export.csv");
+  if (stationId) url.searchParams.set("station", stationId);
+  const res = await fetch(url);
+  const blob = await res.blob();
 
-  const csv = [head, ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toISOString().slice(0,10).replace(/-/g, "");
   a.href = URL.createObjectURL(blob);
-  a.download = `wu_${today}.csv`;
+  a.download = `wu_${stationId || "all"}_${today}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-document.getElementById("loadBtn").addEventListener("click", loadData);
-document.getElementById("csvBtn").addEventListener("click", toCSV);
+importBtn.addEventListener("click", importDay);
+csvBtn.addEventListener("click", exportCSV);
 
-// Pre-cargar hoy y estación por defecto
+// Pre-cargar ejemplo útil
 (function init() {
+  // Sugerimos estación vacía y fecha de ayer (UX)
   const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
-  document.getElementById("date").value = `${yyyy}-${mm}-${dd}`;
+  d.setUTCDate(d.getUTCDate() - 1);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth()+1).padStart(2,"0");
+  const dd = String(d.getUTCDate()).padStart(2,"0");
+  dateInput.value = `${yyyy}${mm}${dd}`;
+  refreshUI(); // global
 })();
 
-
-// --- cache buster for /api calls (added) ---
-(function () {
-  if (window.__apiCacheBusterInstalled) return;
-  window.__apiCacheBusterInstalled = true;
-  const _origFetch = window.fetch;
-  window.fetch = function (input, init) {
-    init = init || {};
-    try {
-      let urlStr = typeof input === "string" ? input : input.url;
-      const u = new URL(urlStr, window.location.origin);
-      if (u.pathname.startsWith("/api")) {
-        u.searchParams.set("_", String(Date.now())); // cache-busting query
-        init.cache = "no-store";
-        init.headers = Object.assign({}, init.headers || {}, {
-          "Cache-Control": "no-cache"
-        });
-        input = u.toString();
-      }
-    } catch (e) { /* ignore */ }
-    return _origFetch.call(this, input, init);
-  };
-})();
-// --- end cache buster (added) ---
 
 
 
