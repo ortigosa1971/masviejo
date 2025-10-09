@@ -2,6 +2,8 @@
 // Proxy + static server for WU PWS history (Railway-friendly)
 import express from "express";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 import { insertMany, getStats, exportQuery, normalizeObservation } from "./db.js";
 
 dotenv.config();
@@ -138,7 +140,7 @@ app.get("/api/db/export.csv", (req, res) => {
     const esc = (v) => {
       if (v === null || v === undefined) return "";
       const s = String(v);
-      if (/[\",\\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      if (/[\",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
       return s;
     };
     const lines = [cols.join(",")];
@@ -163,6 +165,17 @@ app.get("/api/db/view", (req, res) => {
     console.error(e);
     res.status(500).json({ error: "DB error", details: String(e) });
   }
+});
+
+// --- NUEVO: descarga directa de la base SQLite ---
+app.get("/download/db", (req, res) => {
+  const dbPath = path.join(process.cwd(), "data", "wu.db");
+  if (!fs.existsSync(dbPath)) {
+    return res.status(404).send("Base de datos no disponible todavía.");
+  }
+  res.setHeader("Content-Disposition", 'attachment; filename="wu.db"');
+  res.type("application/octet-stream");
+  res.sendFile(dbPath);
 });
 
 // --- Start server ---
