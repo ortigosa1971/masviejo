@@ -210,3 +210,20 @@ app.get("/api/db/export.csv", (req, res) => {
   }
 });
 
+
+// Simple DB viewer endpoint
+app.get("/api/db/view", (req, res) => {
+  try {
+    const station = req.query.station || null;
+    const fromEpoch = req.query.from ? Number(req.query.from) : null;
+    const toEpoch = req.query.to ? Number(req.query.to) : null;
+    const limit = req.query.limit ? Number(req.query.limit) : 200;
+    const rows = exportQuery({ station, fromEpoch, toEpoch, limit });
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB error", details: String(e) });
+  }
+});
+
+
