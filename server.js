@@ -1,11 +1,10 @@
-// server.js (ESM)
-// API Express: importa desde WU, consulta BD, exporta CSV y descarga snapshot de la DB
+// server.js (para Node 18+ / Railway)
+// API principal de Weather Underground + SQLite (better-sqlite3)
 
 import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
-import fetch from "node-fetch"; // si usas Node 18+ puedes quitar esta línea y usar fetch nativo
 import { db, DB_PATH, insertMany, getStats, getRows, exportCsv } from "./db.js";
 
 const app = express();
@@ -17,12 +16,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(PUBLIC_DIR));
 
 /**
- * Normaliza una observación de WU (endpoint history/all)
- * Soporta "metric" y campos directos.
+ * Normaliza una observación devuelta por la API de Weather Underground.
  */
 function mapWUObservation(stationId, obs) {
   const metric = obs.metric || {};
-  const epoch = Number(obs.epoch ?? obs.obsTimeEpoch ?? Math.floor(new Date(obs.obsTimeUtc).getTime() / 1000));
+  const epoch = Number(
+    obs.epoch ?? obs.obsTimeEpoch ?? Math.floor(new Date(obs.obsTimeUtc).getTime() / 1000)
+  );
   return {
     station: stationId,
     epoch,
@@ -38,45 +38,49 @@ function mapWUObservation(stationId, obs) {
     precipTotalMm: metric.precipTotal ?? obs.precipTotalMm ?? 0,
     solarWm2: obs.solarRadiationHigh ?? obs.solarWm2 ?? null,
     uv: obs.uvHigh ?? obs.uv ?? null,
-    raw: JSON.stringify(obs)
+    raw: JSON.stringify(obs),
   };
 }
 
 /**
- * Importa un día de WU: GET /api/wu/history?stationId=IALFAR32&date=YYYYMMDD
- * Requiere process.env.WU_API_KEY
+ * Importa un día de datos desde Weather Underground.
+ * Endpoint: /api/wu/history?stationId=IALFAR32&date=YYYYMMDD
  */
 app.get("/api/wu/history", async (req, res) => {
   try {
     const apiKey = process.env.WU_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: "Falta WU_API_KEY en variables de entorno" });
+    if (!apiKey)
+      return res.status(400).json({ error: "Falta WU_API_KEY en variables de entorno" });
 
     const stationId = String(req.query.stationId || "").trim();
     const date = String(req.query.date || "").trim();
-    if (!stationId || !date) return res.status(400).json({ error: "Parámetros requeridos: stationId y date=YYYYMMDD" });
+    if (!stationId || !date)
+      return res.status(400).json({ error: "Parámetros requeridos: stationId y date=YYYYMMDD" });
 
-    const url = `https://api.weather.com/v2/pws/history/all?stationId=${encodeURIComponent(stationId)}&format=json&date=${date}&apiKey=${apiKey}`;
+    const url = `https://api.weather.com/v2/pws/history/all?stationId=${encodeURIComponent(
+      stationId
+    )}&format=json&date=${date}&apiKey=${apiKey}`;
+
     const r = await fetch(url);
     if (!r.ok) {
       const txt = await r.text();
-      return res.status(r.status).json({ error: `WU HTTP ${r.status}`, body: txt.slice(0, 500) });
+      return res
+        .status(r.status)
+        .json({ error: `WU HTTP ${r.status}`, body: txt.slice(0, 400) });
     }
-    const data = await r.json();
 
-    // La respuesta típica trae data.observations (array)
+    const data = await r.json();
     const list = Array.isArray(data.observations) ? data.observations : [];
+
     if (!list.length) {
       return res.json({ inserted: 0, stationId, date, message: "Sin observaciones para ese día" });
     }
 
-    const rows = list
-      .map(o => mapWUObservation(stationId, o))
-      .filter(r => Number.isFinite(r.epoch));
-
+    const rows = list.map((o) => mapWUObservation(stationId, o)).filter((r) => Number.isFinite(r.epoch));
     const inserted = insertMany(rows);
 
-    const first = rows.length ? rows[0] : null;
-    const last  = rows.length ? rows[rows.length - 1] : null;
+    const first = rows[0] || null;
+    const last = rows[rows.length - 1] || null;
 
     res.json({ inserted, stationId, date, first, last });
   } catch (err) {
@@ -85,7 +89,9 @@ app.get("/api/wu/history", async (req, res) => {
   }
 });
 
-/** KPIs básicos de la BD */
+/**
+ * Devuelve estadísticas básicas de la base de datos.
+ */
 app.get("/api/db/stats", (req, res) => {
   try {
     const station = req.query.station;
@@ -95,7 +101,9 @@ app.get("/api/db/stats", (req, res) => {
   }
 });
 
-/** Ver filas (JSON) */
+/**
+ * Devuelve registros de observaciones (JSON).
+ */
 app.get("/api/db/view", (req, res) => {
   try {
     const { station, limit, fromEpoch, toEpoch } = req.query;
@@ -106,7 +114,9 @@ app.get("/api/db/view", (req, res) => {
   }
 });
 
-/** Export CSV */
+/**
+ * Exporta observaciones en formato CSV.
+ */
 app.get("/api/db/export.csv", (req, res) => {
   try {
     const { station, fromEpoch, toEpoch, limit } = req.query;
@@ -119,17 +129,20 @@ app.get("/api/db/export.csv", (req, res) => {
   }
 });
 
-/** Snapshot seguro de la BD (VACUUM INTO) */
+/**
+ * Permite descargar la base de datos SQLite actual como archivo .db
+ */
 app.get("/download/db", (req, res) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).send("Base de datos no disponible todavía.");
     }
+
     const tmpDir = path.join(process.cwd(), "tmp");
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
     const outPath = path.join(tmpDir, "wu-export.db");
 
-    // Copia consistente del estado actual (SQLite 3.27+)
+    // Copia consistente del estado actual de la base de datos
     db.prepare(`VACUUM INTO ?`).run(outPath);
 
     res.setHeader("Content-Disposition", 'attachment; filename="wu.db"');
@@ -141,7 +154,9 @@ app.get("/download/db", (req, res) => {
   }
 });
 
-/** Depuración: confirma la ruta real y tamaño del fichero */
+/**
+ * Endpoint de depuración: muestra la ruta real de la BD y su tamaño.
+ */
 app.get("/api/db/debug", (_req, res) => {
   try {
     const exists = fs.existsSync(DB_PATH);
@@ -152,7 +167,9 @@ app.get("/api/db/debug", (_req, res) => {
   }
 });
 
-/** Arranque */
+/**
+ * Inicio del servidor.
+ */
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
 });
