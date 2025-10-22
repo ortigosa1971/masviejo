@@ -1,0 +1,16 @@
+{
+  "name": "wu-railway-app",
+  "version": "1.2.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  }
+}
