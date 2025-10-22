@@ -20,7 +20,7 @@ html, body {
 header { padding: 24px 20px 8px; text-align: center; }
 h1 { margin: 0 0 6px; font-weight: 700; font-size: 28px; letter-spacing: .2px; }
 .subtitle { margin: 0; color: var(--muted); }
-main { max-width: 920px; margin: 16px auto 48px; padding: 0 16px; display: grid; gap: 16px; }
+main { max-width: 1000px; margin: 16px auto 48px; padding: 0 16px; display: grid; gap: 16px; }
 .card {
   background: radial-gradient(1200px 80% at 0% 0%, rgba(124,196,255,.08), transparent 60%) , var(--card);
   border: 1px solid var(--border);
@@ -29,14 +29,16 @@ main { max-width: 920px; margin: 16px auto 48px; padding: 0 16px; display: grid;
   padding: 16px;
 }
 .card.small { padding: 12px; }
-.row { display: grid; grid-template-columns: 160px 1fr; gap: 12px; align-items: center; margin-bottom: 12px; }
+.grid { display: grid; gap: 12px; }
+.row { display: grid; grid-template-columns: 160px 1fr auto; gap: 12px; align-items: center; }
 label { color: var(--muted); font-size: 14px; }
 input {
   width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
   background: #0f121a; color: var(--fg); outline: none;
 }
 input:focus { border-color: var(--accent); }
-.buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.hint { color: var(--muted); }
+.buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 button {
   appearance: none; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border);
   background: linear-gradient(180deg, #1e2432, #141722);
@@ -44,17 +46,26 @@ button {
 }
 button:hover { border-color: var(--accent); }
 button.ghost { background: var(--ghost); }
+button.small { padding: 8px 10px; font-size: 12px; }
 pre {
   background: #0d1017;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
   overflow: auto;
-  max-height: 480px;
+  max-height: 520px;
 }
 code { background: #0d1017; border: 1px solid var(--border); padding: 2px 6px; border-radius: 6px; }
 ul { margin: 8px 0 0 18px; }
 footer { text-align: center; color: var(--muted); padding: 16px; }
-@media (max-width: 620px) {
+.mt { margin-top: 12px; }
+
+.table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead th { position: sticky; top: 0; background: #121520; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #1f2433; text-align: left; white-space: nowrap; }
+tr:hover td { background: rgba(124,196,255,.06); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; }
+@media (max-width: 720px) {
   .row { grid-template-columns: 1fr; }
 }

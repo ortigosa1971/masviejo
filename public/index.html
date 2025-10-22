@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WU Client · masviejo</title>
+  <title>Weather Underground · Cliente</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -14,37 +14,43 @@
 
   <main>
     <section class="card">
-      <div class="row">
-        <label for="baseUrl">Base URL</label>
-        <input id="baseUrl" type="url" placeholder="https://TU-APP.railway.app" />
-      </div>
-      <div class="row">
-        <label for="stationId">Station ID</label>
-        <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" />
-      </div>
-      <div class="row">
-        <label for="date">Fecha (YYYYMMDD)</label>
-        <input id="date" type="text" placeholder="Ej: 20251022" />
+      <div class="grid">
+        <div class="row">
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" type="url" placeholder="https://TU-APP.railway.app" />
+          <button id="btnAuto" class="ghost small">Usar esta misma</button>
+        </div>
+        <div class="row">
+          <label for="stationId">Station ID</label>
+          <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" />
+        </div>
+        <div class="row">
+          <label for="date">Fecha</label>
+          <input id="date" type="date" />
+          <small class="hint">Se usa para /history</small>
+        </div>
       </div>
 
       <div class="buttons">
         <button id="btnCurrent">Consultar /current</button>
         <button id="btnHistory">Consultar /history</button>
-        <button id="btnHealth">Probar /</button>
+        <button id="btnHealth">Probar /api/health</button>
         <button id="btnClear" class="ghost">Limpiar</button>
       </div>
     </section>
 
     <section class="card">
       <h2>Resultado</h2>
-      <pre id="output">Sin resultados aún…</pre>
+      <div id="cards"></div>
+      <pre id="output" class="mt">Sin resultados aún…</pre>
     </section>
 
     <section class="card small">
       <h3>Tips</h3>
       <ul>
         <li>Configura <code>WU_API_KEY</code> y <code>WU_UNITS</code> en Railway.</li>
-        <li>Si sirves este HTML desde el mismo servidor, usa <code>app.use(express.static('public'))</code>.</li>
+        <li>Si sirves este HTML desde el mismo servidor, basta con abrir <code>/</code>.</li>
+        <li>Para histórico, selecciona la fecha (se enviará como YYYYMMDD).</li>
       </ul>
     </section>
   </main>
