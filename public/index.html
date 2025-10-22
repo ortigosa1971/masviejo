@@ -20,14 +20,28 @@
           <input id="baseUrl" type="url" placeholder="https://TU-APP.railway.app" />
           <button id="btnAuto" class="ghost small">Usar esta misma</button>
         </div>
+
         <div class="row">
           <label for="stationId">Station ID</label>
-          <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" />
+          <div style="display:flex; gap:.5rem; align-items:center; width:100%">
+            <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" style="flex:1" />
+            <button id="btnLock" class="ghost small" title="Bloquear/editar">Editar</button>
+          </div>
         </div>
+
         <div class="row">
-          <label for="date">Fecha</label>
-          <input id="date" type="date" />
-          <small class="hint">Se usa para /history</small>
+          <label>Rango de fechas</label>
+          <div class="row" style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem">
+            <div>
+              <label for="dateFrom" class="sr-only">Desde</label>
+              <input id="dateFrom" type="date" />
+            </div>
+            <div>
+              <label for="dateTo" class="sr-only">Hasta</label>
+              <input id="dateTo" type="date" />
+            </div>
+          </div>
+          <small class="hint">Si sólo rellenas “Desde”, se tomará como un único día para /history.</small>
         </div>
       </div>
 
@@ -50,7 +64,7 @@
       <ul>
         <li>Configura <code>WU_API_KEY</code> y <code>WU_UNITS</code> en Railway.</li>
         <li>Si sirves este HTML desde el mismo servidor, basta con abrir <code>/</code>.</li>
-        <li>Para histórico, selecciona la fecha (se enviará como YYYYMMDD).</li>
+        <li>Para histórico, usa el selector de fechas (se enviará como YYYYMMDD).</li>
       </ul>
     </section>
   </main>
@@ -62,3 +76,4 @@
   <script src="./app.js"></script>
 </body>
 </html>
+
