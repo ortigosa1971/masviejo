@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// --- Configuración de rutas estáticas ---
+// --- Estáticos en / (sirve public/) ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
@@ -17,16 +17,16 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(cors());
 app.use(express.json());
 
-// --- Health Check (nuevo endpoint) ---
+// --- Health Check (en /api/health) ---
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     message: "Servidor activo",
-    version: "1.2.0-esm",
+    version: "1.2.1-esm",
   });
 });
 
-// --- Helper para validar variables de entorno ---
+// --- Helper env ---
 function getEnv(key, required = false, fallback = undefined) {
   const val = process.env[key];
   if (required && (!val || val.trim() === "")) {
@@ -36,6 +36,7 @@ function getEnv(key, required = false, fallback = undefined) {
 }
 
 // --- /api/wu/history ---
+// Ahora usa v2/pws/observations/all con startDate/endDate en el mismo día
 app.get("/api/wu/history", async (req, res) => {
   try {
     const apiKey = getEnv("WU_API_KEY", true);
@@ -50,11 +51,15 @@ app.get("/api/wu/history", async (req, res) => {
       });
     }
 
+    // Observaciones completas por intervalo -> suele traer temp, humedad, viento, presión, etc.
     const url =
-      `https://api.weather.com/v2/pws/history/all?` +
+      `https://api.weather.com/v2/pws/observations/all?` +
       `stationId=${encodeURIComponent(stationId)}` +
-      `&format=json&date=${encodeURIComponent(date)}` +
+      `&format=json` +
       `&units=${encodeURIComponent(units)}` +
+      `&numericPrecision=decimal` +
+      `&startDate=${encodeURIComponent(date)}` +
+      `&endDate=${encodeURIComponent(date)}` +
       `&apiKey=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url);
@@ -63,7 +68,7 @@ app.get("/api/wu/history", async (req, res) => {
     if (!response.ok) {
       return res.status(response.status).json({
         success: false,
-        message: "Error al consultar Weather Underground (history)",
+        message: "Error al consultar Weather Underground (observations/all)",
         details: raw,
       });
     }
@@ -123,7 +128,8 @@ app.get("/api/wu/current", async (req, res) => {
   }
 });
 
-// --- Arranque del servidor ---
+// --- Arranque ---
 app.listen(PORT, () => {
   console.log(`✅ Servidor escuchando en puerto ${PORT}`);
 });
+
