@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WU Client · masviejo</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header>
+    <h1>Weather Underground · Cliente</h1>
+    <p class="subtitle">Consulta rápida contra tu API de Railway</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="row">
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" type="url" placeholder="https://TU-APP.railway.app" />
+      </div>
+      <div class="row">
+        <label for="stationId">Station ID</label>
+        <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" />
+      </div>
+      <div class="row">
+        <label for="date">Fecha (YYYYMMDD)</label>
+        <input id="date" type="text" placeholder="Ej: 20251022" />
+      </div>
+
+      <div class="buttons">
+        <button id="btnCurrent">Consultar /current</button>
+        <button id="btnHistory">Consultar /history</button>
+        <button id="btnHealth">Probar /</button>
+        <button id="btnClear" class="ghost">Limpiar</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Resultado</h2>
+      <pre id="output">Sin resultados aún…</pre>
+    </section>
+
+    <section class="card small">
+      <h3>Tips</h3>
+      <ul>
+        <li>Configura <code>WU_API_KEY</code> y <code>WU_UNITS</code> en Railway.</li>
+        <li>Si sirves este HTML desde el mismo servidor, usa <code>app.use(express.static('public'))</code>.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <small>masviejo · WU Client</small>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
