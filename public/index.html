@@ -5,6 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Weather Underground · Cliente</title>
   <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* extras ligeros por si tu CSS no los tiene */
+    :root { --fg:#0f172a; --muted:#64748b; --card:#ffffff; --bg:#f8fafc; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Noto Sans, sans-serif; background: var(--bg); color: var(--fg); margin: 0; }
+    header { padding: 24px 16px; }
+    main { padding: 0 16px 32px; max-width: 960px; margin: 0 auto; }
+    .subtitle { color: var(--muted); margin-top: 4px; }
+    .card { background: var(--card); border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .card.small { max-width: 720px; }
+    .grid .row { display: grid; grid-template-columns: 160px 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; }
+    label { color: var(--muted); }
+    input[type="url"], input[type="text"], input[type="date"] { width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    button { padding: 10px 14px; border: 1px solid #0ea5e9; background: #0ea5e9; color: white; border-radius: 10px; cursor: pointer; }
+    button.ghost { background: transparent; color: #0ea5e9; }
+    button.small { padding: 6px 10px; font-size: 12px; }
+    .hint { color: var(--muted); }
+    #cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .kv { display: flex; justify-content: space-between; border-top: 1px dashed #e5e7eb; padding-top: 6px; margin-top: 6px; }
+    pre { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 12px; overflow-x: auto; }
+    .mt { margin-top: 12px; }
+    .row .stack { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  </style>
 </head>
 <body>
   <header>
@@ -23,23 +46,15 @@
 
         <div class="row">
           <label for="stationId">Station ID</label>
-          <div style="display:flex; gap:.5rem; align-items:center; width:100%">
-            <input id="stationId" type="text" placeholder="Ej: IMADRIDA26" style="flex:1" />
-            <button id="btnLock" class="ghost small" title="Bloquear/editar">Editar</button>
-          </div>
+          <input id="stationId" type="text" value="IALFAR32" />
+          <button id="btnStationEdit" class="ghost small">Editar</button>
         </div>
 
         <div class="row">
           <label>Rango de fechas</label>
-          <div class="row" style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem">
-            <div>
-              <label for="dateFrom" class="sr-only">Desde</label>
-              <input id="dateFrom" type="date" />
-            </div>
-            <div>
-              <label for="dateTo" class="sr-only">Hasta</label>
-              <input id="dateTo" type="date" />
-            </div>
+          <div class="stack">
+            <input id="fromDate" type="date" />
+            <input id="toDate" type="date" />
           </div>
           <small class="hint">Si sólo rellenas “Desde”, se tomará como un único día para /history.</small>
         </div>
@@ -64,7 +79,7 @@
       <ul>
         <li>Configura <code>WU_API_KEY</code> y <code>WU_UNITS</code> en Railway.</li>
         <li>Si sirves este HTML desde el mismo servidor, basta con abrir <code>/</code>.</li>
-        <li>Para histórico, usa el selector de fechas (se enviará como YYYYMMDD).</li>
+        <li>Para histórico, usa el rango de fechas. El cliente intentará <code>/history/all</code>, <code>/history</code> y <code>/api/history</code>.</li>
       </ul>
     </section>
   </main>
