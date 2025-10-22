@@ -19,7 +19,7 @@ app.use(express.json());
 
 // --- Health Check ---
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", message: "Servidor activo", version: "1.2.2-esm" });
+  res.json({ status: "ok", message: "Servidor activo", version: "1.3.0-esm" });
 });
 
 // --- Utils ---
@@ -30,15 +30,8 @@ function getEnv(key, required = false, fallback = undefined) {
   }
   return val ? val.trim() : fallback;
 }
-
-function yyyy_mm_dd(date) {
-  // "YYYYMMDD" -> { y:YYYY, m:MM, d:DD }
-  if (!/^\d{8}$/.test(date)) return null;
-  return { y: date.slice(0, 4), m: date.slice(4, 6), d: date.slice(6, 8) };
-}
-
+function validDateYYYYMMDD(s) { return /^\d{8}$/.test(s); }
 async function fetchWU(url) {
-  // Algunas rutas del CDN son quisquillosas con headers
   const res = await fetch(url, {
     headers: {
       "Accept": "application/json",
@@ -48,9 +41,64 @@ async function fetchWU(url) {
   const text = await res.text();
   return { ok: res.ok, status: res.status, text };
 }
+function tryParseJSON(text) { try { return JSON.parse(text); } catch { return null; } }
+function num(x) { const n = Number(x); return Number.isFinite(n) ? n : undefined; }
+
+// Une dos listas de observaciones por tiempo (epoch/obsTimeLocal), rellenando campos vacíos
+function mergeObservations(primary = [], secondary = [], toleranceSec = 300) {
+  // indexa secondary por epoch +/- tolerancia
+  const idx = new Map();
+  for (const s of secondary) {
+    const epoch = num(s.epoch);
+    if (!Number.isFinite(epoch)) continue;
+    const bucket = Math.floor(epoch / toleranceSec);
+    if (!idx.has(bucket)) idx.set(bucket, []);
+    idx.get(bucket).push(s);
+  }
+  const pick = (a, b) => (a !== undefined && a !== null && a !== "" ? a : b);
+
+  const out = [];
+  for (const p of primary) {
+    const epoch = num(p.epoch);
+    let best = null;
+    if (Number.isFinite(epoch)) {
+      const bucket = Math.floor(epoch / toleranceSec);
+      const candidates = [
+        ...(idx.get(bucket - 1) || []),
+        ...(idx.get(bucket) || []),
+        ...(idx.get(bucket + 1) || []),
+      ];
+      // elige el más cercano en tiempo
+      let bestDt = Infinity;
+      for (const c of candidates) {
+        const e = num(c.epoch);
+        if (!Number.isFinite(e)) continue;
+        const dt = Math.abs(e - epoch);
+        if (dt <= toleranceSec && dt < bestDt) { bestDt = dt; best = c; }
+      }
+    }
+
+    if (!best) { out.push(p); continue; }
+
+    // fusionar
+    const merged = { ...best, ...p }; // p tiene prioridad
+    // fusiona subobjeto metric campo a campo
+    merged.metric = {
+      ...(best.metric || {}),
+      ...(p.metric || {})
+    };
+    // rellena campos top-level si faltan en p pero existen en best
+    for (const k of Object.keys(best)) {
+      if (k === "metric") continue;
+      merged[k] = pick(p[k], best[k]);
+    }
+    out.push(merged);
+  }
+  return out;
+}
 
 // --- /api/wu/history ---
-// Estrategia: observations/all -> observations/hourly -> history/all
+// Estrategia: hourly (más rico) + merge con history/all (lluvia) -> fallback solo history/all
 app.get("/api/wu/history", async (req, res) => {
   try {
     const apiKey = getEnv("WU_API_KEY", true);
@@ -64,77 +112,58 @@ app.get("/api/wu/history", async (req, res) => {
         error: "Parámetros requeridos: stationId y date=YYYYMMDD",
       });
     }
-
-    const d = yyyy_mm_dd(date);
-    if (!d) {
+    if (!validDateYYYYMMDD(date)) {
       return res.status(400).json({
         success: false,
         error: "Formato de fecha inválido. Usa YYYYMMDD",
       });
     }
 
-    // 1) observations/all (más completo)
-    const urlAll =
-      `https://api.weather.com/v2/pws/observations/all?` +
-      `stationId=${encodeURIComponent(stationId)}` +
-      `&format=json` +
-      `&units=${encodeURIComponent(units)}` +
-      `&numericPrecision=decimal` +
-      `&startDate=${encodeURIComponent(date)}` +
-      `&endDate=${encodeURIComponent(date)}` +
-      `&apiKey=${encodeURIComponent(apiKey)}`;
+    const base = `stationId=${encodeURIComponent(stationId)}&format=json&units=${encodeURIComponent(units)}&apiKey=${encodeURIComponent(apiKey)}`;
 
-    let step = "observations/all";
-    let r = await fetchWU(urlAll);
+    // 1) hourly (suele traer temp/humedad/viento/presión/uv…)
+    const urlHourly = `https://api.weather.com/v2/pws/observations/hourly?${base}&numericPrecision=decimal&startDate=${date}&endDate=${date}`;
+    const rHourly = await fetchWU(urlHourly);
+    const jsonHourly = rHourly.ok ? tryParseJSON(rHourly.text) : null;
+    const hourlyObs = jsonHourly?.observations || [];
 
-    // 2) fallback: observations/hourly (si 401/403/404)
-    if (!r.ok && [401, 403, 404].includes(r.status)) {
-      const urlHourly =
-        `https://api.weather.com/v2/pws/observations/hourly?` +
-        `stationId=${encodeURIComponent(stationId)}` +
-        `&format=json` +
-        `&units=${encodeURIComponent(units)}` +
-        `&numericPrecision=decimal` +
-        `&startDate=${encodeURIComponent(date)}` +
-        `&endDate=${encodeURIComponent(date)}` +
-        `&apiKey=${encodeURIComponent(apiKey)}`;
-      step = "observations/hourly";
-      r = await fetchWU(urlHourly);
-    }
+    // 2) history/all (precipitación y agregados, a veces pobre en el resto)
+    const urlHistAll = `https://api.weather.com/v2/pws/history/all?${base}&date=${date}`;
+    const rHist = await fetchWU(urlHistAll);
+    const jsonHist = rHist.ok ? tryParseJSON(rHist.text) : null;
+    const histObs = jsonHist?.observations || [];
 
-    // 3) fallback final: history/all (el que ya te funcionaba)
-    if (!r.ok && [401, 403, 404].includes(r.status)) {
-      const urlHistoryAll =
-        `https://api.weather.com/v2/pws/history/all?` +
-        `stationId=${encodeURIComponent(stationId)}` +
-        `&format=json` +
-        `&date=${encodeURIComponent(date)}` +
-        `&units=${encodeURIComponent(units)}` +
-        `&apiKey=${encodeURIComponent(apiKey)}`;
-      step = "history/all";
-      r = await fetchWU(urlHistoryAll);
-    }
-
-    if (!r.ok) {
-      return res.status(r.status || 502).json({
+    // Si hourly falló, devuelve al menos history/all
+    if (!rHourly.ok || !Array.isArray(hourlyObs) || hourlyObs.length === 0) {
+      if (rHist.ok && Array.isArray(histObs) && histObs.length > 0) {
+        return res.json({
+          success: true,
+          stationId, date, units,
+          source: "history/all",
+          data: { observations: histObs }
+        });
+      }
+      // si ambos fallan, propaga el mejor error
+      const status = rHourly.ok ? (rHist.status || 502) : (rHourly.status || 502);
+      return res.status(status).json({
         success: false,
-        message: `Error al consultar Weather Underground (${step})`,
-        details: r.text,
+        message: "No se pudieron obtener observaciones (hourly ni history/all)",
+        details: { hourly: rHourly.text?.slice(0,400), historyAll: rHist.text?.slice(0,400) }
       });
     }
 
-    let data;
-    try {
-      data = JSON.parse(r.text);
-    } catch {
-      return res.status(502).json({
-        success: false,
-        message: `Respuesta no JSON desde Weather Underground (${step})`,
-        details: r.text?.slice(0, 400),
-      });
+    // 3) hay hourly -> fusiona con history/all para añadir lluvia/otros
+    let merged = hourlyObs;
+    if (Array.isArray(histObs) && histObs.length > 0) {
+      merged = mergeObservations(hourlyObs, histObs, 600); // tolerancia 10 min
     }
 
-    res.json({ success: true, stationId, date, units, source: step, data });
+    return res.json({
+      success: true,
+      stationId, date, units,
+      source: "hourly+history/all",
+      data: { observations: merged }
+    });
   } catch (err) {
     console.error("Error en /api/wu/history:", err);
     res.status(500).json({
@@ -167,13 +196,12 @@ app.get("/api/wu/current", async (req, res) => {
       return res.status(r.status || 502).json({
         success: false,
         message: "Error al consultar Weather Underground (current)",
-        details: r.text,
+        details: r.text?.slice(0,400),
       });
     }
 
-    let data;
-    try { data = JSON.parse(r.text); }
-    catch {
+    const data = tryParseJSON(r.text);
+    if (!data) {
       return res.status(502).json({
         success: false,
         message: "Respuesta no JSON desde Weather Underground (current)",
