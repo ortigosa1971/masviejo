@@ -1,148 +1,262 @@
-const $ = (q) => document.querySelector(q);
-const out = $("#output");
-const cards = $("#cards");
+/* utilidades dom */
+const $ = (s) => document.querySelector(s);
+const baseEl = $("#baseUrl");
+const btnAuto = $("#btnAuto");
+const stationEl = $("#stationId");
+const btnLock = $("#btnLock");
+const fromEl = $("#dateFrom");
+const toEl = $("#dateTo");
+const btnCurrent = $("#btnCurrent");
+const btnHistory = $("#btnHistory");
+const btnHealth = $("#btnHealth");
+const btnClear = $("#btnClear");
+const outputEl = $("#output");
+const cardsEl = $("#cards");
 
-function print(obj) {
-  out.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
-}
-function clearCards() { cards.innerHTML = ""; }
-function base() {
-  const b = $("#baseUrl").value.trim().replace(/\/$/, "");
-  if (!b) throw new Error("Debes indicar la Base URL (ej: https://tu-app.railway.app)");
-  return b;
-}
-function yyyymmddFromDateInput(val) { return val ? val.replace(/-/g, "") : ""; }
+/* persistencia */
+const LS = {
+  baseUrl: "wu_baseUrl",
+  station: "wu_stationId",
+  from: "wu_date_from",
+  to: "wu_date_to",
+};
 
-function asTable(rows, headers) {
-  const wrap = document.createElement("div");
-  wrap.className = "table-wrap";
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
-  headers.forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
-  thead.appendChild(trh); table.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  rows.forEach(r => {
-    const tr = document.createElement("tr");
-    r.forEach(c => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody); wrap.appendChild(table);
-  return wrap;
+function saveState() {
+  if (baseEl.value) localStorage.setItem(LS.baseUrl, baseEl.value);
+  if (stationEl.value) localStorage.setItem(LS.station, stationEl.value);
+  if (fromEl.value) localStorage.setItem(LS.from, fromEl.value);
+  if (toEl.value) localStorage.setItem(LS.to, toEl.value);
 }
 
-// helper: devuelve el primer valor definido entre varias rutas ("metric.temp", "metric.tempAvg", etc.)
-function pick(obj, paths, fallback = "—") {
-  for (const p of paths) {
-    const parts = p.split(".");
-    let cur = obj, ok = true;
-    for (const part of parts) {
-      if (cur && Object.prototype.hasOwnProperty.call(cur, part)) cur = cur[part];
-      else { ok = false; break; }
-    }
-    if (ok && cur !== undefined && cur !== null && cur !== "") return cur;
+function loadState() {
+  baseEl.value = localStorage.getItem(LS.baseUrl) || "";
+  stationEl.value = localStorage.getItem(LS.station) || "IALFAR32";
+  fromEl.value = localStorage.getItem(LS.from) || "";
+  toEl.value = localStorage.getItem(LS.to) || "";
+}
+
+/* helpers */
+const ymd = (d) => d.replaceAll("-", ""); // yyyy-mm-dd -> yyyymmdd
+const friendlyErr = (e) =>
+  (e && (e.message || e.statusText)) ? (e.message || e.statusText) : String(e);
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+
+function setOutput(text, cards = []) {
+  outputEl.textContent = text;
+  cardsEl.innerHTML = "";
+  for (const c of cards) {
+    const div = document.createElement("div");
+    div.className = "mini-card";
+    div.innerHTML = c;
+    cardsEl.appendChild(div);
   }
-  return fallback;
 }
 
-function renderCurrent(payload) {
-  clearCards();
-  const obs = payload?.data?.observations?.[0];
-  if (!obs) return print(payload);
-  const metric = obs.metric || {};
-  const rows = [
-    ["Estación", obs.stationID],
-    ["Barrio", obs.neighborhood || ""],
-    ["Hora local", obs.obsTimeLocal || ""],
-    ["Temp (°C)", metric.temp],
-    ["Sensación (°C)", metric.heatIndex],
-    ["Rocío (°C)", metric.dewpt],
-    ["Viento (km/h)", metric.windSpeed],
-    ["Racha (km/h)", metric.windGust],
-    ["Dir. viento (°)", obs.winddir],
-    ["Humedad (%)", obs.humidity],
-    ["Presión (hPa)", metric.pressure],
-    ["UV", obs.uv],
-    ["Lluvia tasa (mm/h)", metric.precipRate],
-    ["Lluvia total (mm)", metric.precipTotal],
-    ["Altitud (m)", metric.elev],
-  ];
-  const card = document.createElement("div");
-  card.appendChild(asTable(rows, ["Campo", "Valor"]));
-  cards.appendChild(card);
-  print(payload);
+function getBase() {
+  const b = baseEl.value.trim();
+  assert(b, "Falta Base URL");
+  return b.replace(/\/+$/, ""); // sin barra final
 }
 
-function renderHistory(payload) {
-  clearCards();
-  const obs = payload?.data?.observations;
-  if (!Array.isArray(obs) || obs.length === 0) return print(payload);
-
-  // Candidatas con fallback de campos (instantáneos y agregados de history/all)
-  const candidates = [
-    { keys: ["metric.temp","metric.tempAvg","metric.tempHigh","metric.tempLow"], title: "Temp (°C)" },
-    { keys: ["humidity","humidityAvg","humidityHigh","humidityLow"],            title: "Humedad (%)" },
-    { keys: ["metric.windSpeed","metric.windspeedAvg","metric.windspeedHigh"],  title: "Viento (km/h)" },
-    { keys: ["metric.windGust","metric.windgustHigh","metric.windgustAvg"],     title: "Racha (km/h)" },
-    { keys: ["winddir","winddirAvg"],                                           title: "Dir. viento (°)" },
-    { keys: ["metric.pressure","metric.pressureMax","metric.pressureMin"],      title: "Presión (hPa)" },
-    { keys: ["uv","uvHigh"],                                                    title: "UV" },
-    { keys: ["metric.precipRate"],                                             title: "Lluvia tasa (mm/h)" },
-    { keys: ["metric.precipTotal"],                                            title: "Lluvia total (mm)" },
-    { keys: ["metric.dewpt","metric.dewptAvg","metric.dewptHigh","metric.dewptLow"], title: "Rocío (°C)" },
-    { keys: ["metric.heatIndex","metric.heatindexAvg","metric.heatindexHigh","metric.heatindexLow"], title: "Sensación (°C)" },
-    { keys: ["metric.elev"],                                                    title: "Altitud (m)" },
-    { keys: ["metric.pressureTrend"],                                           title: "Tendencia presión" },
-  ];
-
-  // Activas: al menos una observación con valor
-  const active = candidates.filter(c =>
-    obs.some(o => {
-      const v = pick(o, c.keys, null);
-      return v !== null && v !== "—";
-    })
-  );
-
-  const headers = ["Hora local", ...active.map(a => a.title)];
-  const rows = obs.map(o => {
-    const time = o?.obsTimeLocal || o?.obsTimeUtc || "—";
-    const values = active.map(a => pick(o, a.keys));
-    return [time, ...values];
-  });
-
-  cards.appendChild(asTable(rows, headers));
-  print(payload);
+function stationId() {
+  const s = stationEl.value.trim();
+  assert(s, "Falta Station ID");
+  return s;
 }
 
-async function call(path, onRender) {
-  const url = `${base()}${path}`;
-  print("Cargando " + url + " ...");
+function* daysBetweenISO(fromISO, toISO) {
+  const start = new Date(fromISO);
+  const end = toISO ? new Date(toISO) : new Date(fromISO);
+  const cur = new Date(start);
+  while (cur <= end) {
+    yield cur.toISOString().slice(0, 10);
+    cur.setDate(cur.getDate() + 1);
+  }
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`HTTP ${r.status} ${r.statusText} · ${url}\n${txt}`);
+  }
+  return r.json();
+}
+
+/* renderizadores */
+function renderCurrentCard(json) {
+  const d = json?.data || json;
+  if (!d) return "";
+  const ts = d.obsTimeLocal || d.obsTimeUtc || "";
+  return `
+    <div><strong>${d.stationId || d.stationID || stationId()}</strong></div>
+    <div>${ts}</div>
+    <div class="kv"><span>Temp</span><span>${d.temperature ?? d.metric?.tempAvg ?? "—"} °C</span></div>
+    <div class="kv"><span>Hum.</span><span>${d.humidity ?? d.metric?.humidityAvg ?? "—"} %</span></div>
+    <div class="kv"><span>Viento</span><span>${d.windSpeed ?? d.metric?.windspeedAvg ?? "—"} km/h</span></div>
+    <div class="kv"><span>Racha</span><span>${d.windGust ?? d.metric?.windgustHigh ?? "—"} km/h</span></div>
+    <div class="kv"><span>Presión</span><span>${d.pressure ?? d.metric?.pressureMax ?? "—"} hPa</span></div>
+  `;
+}
+
+function summarizeObservations(observations) {
+  const by = (getter) =>
+    observations.map(getter).filter((x) => Number.isFinite(x));
+  const temps = by((o) => o?.metric?.tempAvg);
+  const tmin = temps.length ? Math.min(...temps) : null;
+  const tmax = temps.length ? Math.max(...temps) : null;
+  const gusts = by((o) => o?.metric?.windspeedHigh);
+  const gmax = gusts.length ? Math.max(...gusts) : null;
+  const rain = by((o) => o?.metric?.precipTotal);
+  const lluvia = rain.length
+    ? rain.reduce((a, b) => a + b, 0)
+    : 0;
+
+  return {
+    registros: observations.length,
+    tempMin: tmin,
+    tempMax: tmax,
+    rachaMax_kmh: gmax,
+    lluviaTotal_mm: Number((lluvia).toFixed(2)),
+    desde: observations[0]?.obsTimeLocal || "",
+    hasta: observations.at(-1)?.obsTimeLocal || "",
+  };
+}
+
+/* acciones */
+btnAuto.addEventListener("click", () => {
+  const here = `${location.protocol}//${location.host}`;
+  baseEl.value = here;
+  saveState();
+});
+
+let locked = true;
+function applyLockState() {
+  stationEl.readOnly = locked;
+  btnLock.textContent = locked ? "Editar" : "Bloquear";
+  btnLock.classList.toggle("primary", !locked);
+}
+btnLock.addEventListener("click", () => {
+  locked = !locked;
+  applyLockState();
+  if (locked) saveState();
+});
+
+/* botones principales */
+btnCurrent.addEventListener("click", async () => {
   try {
-    const res = await fetch(url);
-    const text = await res.text();
-    if (!res.ok) { print({ ok: false, status: res.status, body: text }); return; }
-    let json = null; try { json = JSON.parse(text); } catch { return print(text); }
-    onRender ? onRender(json) : print(json);
-  } catch (e) { print(String(e)); }
-}
+    setOutput("Consultando /current…");
+    const url = `${getBase()}/current?stationId=${encodeURIComponent(
+      stationId()
+    )}&units=m`;
+    const json = await fetchJSON(url);
+    const card = renderCurrentCard(json);
+    setOutput(JSON.stringify(json, null, 2), [card]);
+    saveState();
+  } catch (e) {
+    setOutput("Error: " + friendlyErr(e));
+  }
+});
 
-$("#btnCurrent").addEventListener("click", () => {
-  const stationId = $("#stationId").value.trim();
-  if (!stationId) return print("Falta stationId");
-  call(`/api/wu/current?stationId=${encodeURIComponent(stationId)}`, renderCurrent);
-});
-$("#btnHistory").addEventListener("click", () => {
-  const stationId = $("#stationId").value.trim();
-  const date = yyyymmddFromDateInput($("#date").value);
-  if (!stationId || !date) return print("Faltan stationId y/o date");
-  call(`/api/wu/history?stationId=${encodeURIComponent(stationId)}&date=${encodeURIComponent(date)}`, renderHistory);
-});
-$("#btnHealth").addEventListener("click", () => call(`/api/health`));
-$("#btnClear").addEventListener("click", () => { clearCards(); print("Sin resultados aún…"); });
-$("#btnAuto").addEventListener("click", () => { $("#baseUrl").value = window.location.origin; });
+btnHistory.addEventListener("click", async () => {
+  try {
+    setOutput("Consultando /history…");
+    const base = getBase();
+    const st = stationId();
+    const from = fromEl.value;
+    const to = toEl.value || fromEl.value; // si sólo hay 'desde', un solo día
+    assert(from, "Selecciona al menos la fecha 'Desde'.");
 
-document.addEventListener("DOMContentLoaded", () => {
-  const today = new Date().toISOString().slice(0,10);
-  $("#date").value = today;
-  if (location.hostname !== "localhost") $("#baseUrl").value = window.location.origin;
+    const ymdds = [];
+    for (const iso of daysBetweenISO(from, to)) {
+      ymdds.push(ymd(iso));
+    }
+
+    const results = await Promise.all(
+      ymdds.map((d) =>
+        fetchJSON(
+          `${base}/history?stationId=${encodeURIComponent(
+            st
+          )}&date=${d}&units=m`
+        ).catch((e) => ({ __error: friendlyErr(e), date: d }))
+      )
+    );
+
+    // separar errores
+    const errs = results.filter((r) => r.__error);
+    const oks = results.filter((r) => !r.__error);
+
+    // aplanar observaciones y ordenar
+    const observations = oks.flatMap((x) => x?.data?.observations || []);
+    observations.sort((a, b) =>
+      (a.obsTimeLocal || "").localeCompare(b.obsTimeLocal || "")
+    );
+
+    const summary = summarizeObservations(observations);
+    const header = {
+      stationId: st,
+      rango: `${from} → ${to}`,
+      dias: ymdds.length,
+      errores: errs.length,
+    };
+
+    const cards = [
+      `<div><strong>${st}</strong></div>
+       <div>${from} → ${to} (${ymdds.length} día/s)</div>
+       <div class="kv"><span>Registros</span><span>${summary.registros}</span></div>
+       <div class="kv"><span>Temp min/max</span><span>${summary.tempMin ?? "—"} / ${summary.tempMax ?? "—"} °C</span></div>
+       <div class="kv"><span>Racha máx</span><span>${summary.rachaMax_kmh ?? "—"} km/h</span></div>
+       <div class="kv"><span>Lluvia total</span><span>${summary.lluviaTotal_mm} mm</span></div>`
+    ];
+
+    let text = "Resumen\n" + JSON.stringify({ ...header, ...summary }, null, 2);
+    if (errs.length) {
+      text +=
+        "\n\nErrores por día:\n" +
+        errs
+          .map((e) => `- ${e.date || "??"} · ${e.__error}`)
+          .join("\n");
+    }
+    text +=
+      "\n\nObservaciones\n" + JSON.stringify(observations, null, 2);
+
+    setOutput(text, cards);
+    saveState();
+  } catch (e) {
+    setOutput("Error: " + friendlyErr(e));
+  }
 });
+
+btnHealth.addEventListener("click", async () => {
+  try {
+    setOutput("Consultando /api/health…");
+    const url = `${getBase()}/api/health`;
+    const json = await fetchJSON(url);
+    setOutput(JSON.stringify(json, null, 2), [
+      `<div><strong>/api/health</strong></div><div>OK</div>`,
+    ]);
+    saveState();
+  } catch (e) {
+    setOutput("Error: " + friendlyErr(e));
+  }
+});
+
+btnClear.addEventListener("click", () => {
+  cardsEl.innerHTML = "";
+  outputEl.textContent = "Sin resultados aún…";
+});
+
+/* arranque */
+loadState();
+locked = true; // bloquear por defecto
+stationEl.value ||= "IALFAR32";
+applyLockState();
+
+// eventos para persistir cambios
+[baseEl, stationEl, fromEl, toEl].forEach((el) =>
+  el.addEventListener("change", saveState)
+);
+
