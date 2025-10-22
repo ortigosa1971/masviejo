@@ -49,6 +49,25 @@ function asTable(rows, headers) {
   return wrap;
 }
 
+// helper: devuelve el primer valor definido entre varias rutas (e.g. "metric.temp")
+function pick(obj, paths, fallback = "—") {
+  for (const p of paths) {
+    const parts = p.split(".");
+    let cur = obj;
+    let ok = true;
+    for (const part of parts) {
+      if (cur && Object.prototype.hasOwnProperty.call(cur, part)) {
+        cur = cur[part];
+      } else {
+        ok = false;
+        break;
+      }
+    }
+    if (ok && cur !== undefined && cur !== null && cur !== "") return cur;
+  }
+  return fallback;
+}
+
 function renderCurrent(payload) {
   clearCards();
   const obs = payload?.data?.observations?.[0];
@@ -74,26 +93,56 @@ function renderCurrent(payload) {
   const card = document.createElement("div");
   card.appendChild(asTable(rows, ["Campo", "Valor"]));
   cards.appendChild(card);
+
+  // deja el JSON para inspección
+  print(payload);
 }
 
 function renderHistory(payload) {
   clearCards();
   const obs = payload?.data?.observations;
   if (!Array.isArray(obs) || obs.length === 0) return print(payload);
-  const headers = ["Hora local", "Temp (°C)", "Humedad (%)", "Viento (km/h)", "Racha (km/h)", "Presión (hPa)", "Lluvia (mm)"];
-  const rows = obs.map(o => {
-    const m = o.metric || {};
-    return [
-      o.obsTimeLocal || "",
-      m.temp ?? "",
-      o.humidity ?? "",
-      m.windSpeed ?? "",
-      m.windGust ?? "",
-      m.pressure ?? "",
-      m.precipTotal ?? ""
-    ];
+
+  // Candidatas de columnas (orden sugerido)
+  const candidates = [
+    { key: "metric.temp",        title: "Temp (°C)" },
+    { key: "humidity",           title: "Humedad (%)" },
+    { key: "metric.windSpeed",   title: "Viento (km/h)" },
+    { key: "metric.windGust",    title: "Racha (km/h)" },
+    { key: "winddir",            title: "Dir. viento (°)" },
+    { key: "metric.pressure",    title: "Presión (hPa)" },
+    { key: "uv",                 title: "UV" },
+    { key: "metric.precipRate",  title: "Lluvia tasa (mm/h)" },
+    { key: "metric.precipTotal", title: "Lluvia total (mm)" },
+    { key: "metric.dewpt",       title: "Rocío (°C)" },
+    { key: "metric.heatIndex",   title: "Sensación (°C)" },
+    { key: "metric.elev",        title: "Altitud (m)" },
+  ];
+
+  // Decide dinámicamente qué columnas tienen al menos un dato
+  const active = candidates.filter(c => {
+    const has = obs.some(o => {
+      const v = pick(o, [c.key], null);
+      return v !== null && v !== "—";
+    });
+    return has;
   });
+
+  // Encabezados (siempre hora + activas)
+  const headers = ["Hora local", ...active.map(a => a.title)];
+
+  // Filas
+  const rows = obs.map(o => {
+    const time = o?.obsTimeLocal || o?.obsTimeUtc || "—";
+    const values = active.map(a => pick(o, [a.key]));
+    return [time, ...values];
+  });
+
+  // Render
   cards.appendChild(asTable(rows, headers));
+
+  // deja el JSON para inspección
+  print(payload);
 }
 
 async function call(path, onRender) {
